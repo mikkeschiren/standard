@@ -17,6 +17,7 @@
     <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
   <![endif]-->
   <?php print $scripts; ?>
+  <link href='http://fonts.googleapis.com/css?family=Roboto+Condensed|Droid+Serif|Roboto+Slab' rel='stylesheet' type='text/css'>
 </head>
 <body class="<?php print $classes; ?>" <?php print $attributes;?>>
   <div id="skip-link">

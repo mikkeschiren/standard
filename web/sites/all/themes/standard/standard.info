@@ -36,4 +36,4 @@ settings[bootstrap_js_include]= 0
 
 base theme = bootstrap_business
 
-
+fonts[google_fonts_api][] = "Droid Serif&subset=latin#regular"

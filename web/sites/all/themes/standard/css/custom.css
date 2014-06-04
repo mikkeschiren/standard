@@ -5,3 +5,15 @@ margin: 0 40px;
  .panel-1col .field-name-body {
 margin-top: 1em;
 }
+
+h1, h2, h3 {
+ font-family: 'Droid Serif', serif;
+}
+
+#site-name a {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 59px;
+}
+p {
+  font-family: 'Roboto Slab', serif;
+}
