@@ -1,0 +1,15 @@
+name = Pathauto
+description = Provides a mechanism for modules to automatically generate aliases for the content they manage.
+dependencies[] = path
+dependencies[] = token
+core = 7.x
+files[] = pathauto.test
+configure = admin/config/search/path/patterns
+recommends[] = redirect
+
+
+; Information added by drush on 2014-03-20
+version = "dd7533f4af00865ddc5a836b3ee418d09beb1f5f"
+project = "pathauto"
+datestamp = "1395324502"
+

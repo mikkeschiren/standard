@@ -1,0 +1,9 @@
+name = Devel Login
+description = Allows you to login by adding a get parameter to any page
+core = 7.x
+
+; Information added by drush on 2014-04-10
+version = "1.1"
+project = "devel_login"
+datestamp = "1397132053"
+

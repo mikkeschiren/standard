@@ -1,0 +1,12 @@
+name = Arnold: Environment
+version = 7.x-1.x-dev
+package = "Arnold"
+core = 7.x
+dependencies[] = ctools
+dependencies[] = environment
+
+; Information added by drush on 2014-03-20
+version = "ce68bb1adf0a60e395c854c9165dfdc757d65a94"
+project = "arnold_environment"
+datestamp = "1395324487"
+

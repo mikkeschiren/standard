@@ -1,0 +1,53 @@
+<?php
+
+function devel_login_init() {
+
+  if (isset($_GET['logout'])) {
+    return _devel_login_user_logout(current_path());
+  }
+
+  if (isset($_GET['login'])) {
+    $uid = 1;
+    if (!empty($_GET['login'])) {
+      $user = is_numeric($_GET['login']) ? user_load($_GET['login']) : user_load_by_name($_GET['login']);
+      if (!$user) {
+        return drupal_set_message(t('User %name not found', array('%name' => $_GET['login'])));
+      }
+      $uid = $user->uid;
+    }
+
+    $loaded_user = user_load($uid);
+    if ($loaded_user) {
+      global $user;
+      $user = $loaded_user;
+      user_login_finalize();
+      drupal_set_message(t('User <em>@name</em> logged in', array('@name' => $user->name)));
+
+      drupal_goto(current_path());
+    }
+
+  }
+}
+
+function devel_login_module_implements_alter(&$implementations, $hook) {
+  if ($hook == 'init') {
+    unset($implementations['devel_login']);
+    $implementations = array('devel_login' => FALSE) + $implementations;
+  }
+}
+
+/**
+ * Copy of user_logout() + $path argument
+ */
+function _devel_login_user_logout($path = NULL) {
+  global $user;
+
+  watchdog('user', 'Session closed for %name.', array('%name' => $user->name));
+
+  module_invoke_all('user_logout', $user);
+
+  // Destroy the current session, and reset $user to the anonymous user.
+  session_destroy();
+
+  drupal_goto($path);
+}

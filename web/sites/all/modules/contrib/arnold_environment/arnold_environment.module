@@ -1,0 +1,140 @@
+<?php
+
+/**
+ * Declare additional environments.
+ *
+ * This hook is to facilitate UI building and restricting environment switch to
+ * known environments.
+ *
+ * @return
+ *  Array of environment names in the format:
+ *  - label: Human-readable name for the environment.
+ *  - description: Description of the environment and it's purpose.
+ *  - workflow: Tag the state with the machine name of the environment workflow.
+ *  - allowed: Central definition of permitted operations for the
+ *    environment_allowed() function. Default FALSE indicates that something
+ *    should not happen, such as show the user a debugging message. Different
+ *    categories can be specified for different rulesets.
+ *
+ * @see environment_allowed
+ */
+function arnold_environment_environment() {
+  $environments = array();
+
+  $environments['loc'] = array(
+    'label' => t('Local Development'),
+  );
+
+  $environments['dev'] = array(
+    'label' => t('Development Server'),
+  );
+
+  $environments['stage'] = array(
+    'label' => t('Staging'),
+    'description' => t('Staging sites are for sprint reviews and customer tests.'),
+  );
+
+  $environments['prod'] = array(
+    'label' => t('Production'),
+  );
+
+  return $environments;
+}
+
+function arnold_environment_environment_switch($target_env, $current_env, $workflow = NULL) {
+
+  _arnold_environment_execute_plugin_tasks($target_env, 'environment_switch_tasks');
+
+}
+
+function _arnold_environment_execute_plugin_tasks($target_env, $plugin_name){
+
+  $site_settings = _arnold_environment_get_site_settings();
+  $switch_task_plugins = _arnold_environment_get_plugins($plugin_name);
+
+  if(isset($site_settings[$plugin_name][$target_env])){
+    foreach($site_settings[$plugin_name][$target_env] as $inc_file_name => $inc_file_task_list){
+      foreach($inc_file_task_list as $task_name => $fn_args){
+        $fn_name = $switch_task_plugins[$inc_file_name][$task_name];
+        if(function_exists($fn_name)){
+          call_user_func($fn_name, $target_env, $fn_args);
+        }else{
+          drush_set_error('', dt('Function for "@task_name" task not found', array('@task_name' => $task_name)));
+        }
+      }
+    }
+  }
+
+}
+
+function _arnold_environment_get_site_settings(){
+  $site_settings = module_invoke_all('arnold_environment_site_settings');
+  drupal_alter('arnold_environment_site_settings', $site_settings);
+  return $site_settings;
+}
+
+/**
+ * Fetch metadata for all content_type plugins.
+ *
+ * @return
+ *   An array of arrays with information about all available panel content types.
+ */
+function _arnold_environment_get_plugins($plugin_name) {
+  ctools_include('plugins');
+  $plugins = ctools_get_plugins('arnold_environment', $plugin_name);
+  drupal_alter('arnold_environment_plugins', $plugins);
+  return $plugins;
+}
+
+/**
+ * Implements hook_ctools_plugin_TYPE()
+ */
+function arnold_environment_ctools_plugin_type() {
+  return array(
+    'environment_switch_tasks' => array(),
+    'environment_checklist_tasks' => array()
+  );
+}
+
+function arnold_environment_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'arnold_environment') {
+    return $plugin;
+  }
+}
+
+function _arnold_environment_get_loc_env_file_location(){
+  return '/srv/environment/environment.php';
+}
+
+function _arnold_environment_is_env($env_arg){
+
+  $env_file_location = _arnold_environment_get_loc_env_file_location();
+
+  if(file_exists($env_file_location)){
+    require $env_file_location;
+
+    if($environment == $env_arg){
+      return TRUE;
+    }
+  };
+
+  return FALSE;
+}
+
+/**
+ * Arnold Environment install task. Implement in hook_install_tasks in your .profile file, like this for example:
+ *
+ *   '_arnold_environment_install_task_switch_loc_env' => array(
+ *     'display_name' => st('Arnold environment install task'),
+ *     'display' => TRUE,
+ *     'type' => 'batch',
+ *   ),
+ *
+ */
+function _arnold_environment_install_task_auto_switch_to_loc(&$install_state) {
+
+  if(_arnold_environment_is_env('loc')){
+      environment_switch('loc');
+  };
+
+}
