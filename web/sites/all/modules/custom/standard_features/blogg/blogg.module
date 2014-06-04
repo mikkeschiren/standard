@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Blogg feature.
+ */
+
+include_once 'blogg.features.inc';

@@ -32,11 +32,51 @@ function artikel_ds_field_settings_info() {
 
   $ds_fieldsetting = new stdClass();
   $ds_fieldsetting->api_version = 1;
+  $ds_fieldsetting->id = 'node|artikel|default';
+  $ds_fieldsetting->entity_type = 'node';
+  $ds_fieldsetting->bundle = 'artikel';
+  $ds_fieldsetting->view_mode = 'default';
+  $ds_fieldsetting->settings = array(
+    'service_links_displays_twitter' => array(
+      'weight' => '3',
+      'label' => 'hidden',
+      'format' => 'sld_single_image',
+    ),
+    'service_links_displays_reddit' => array(
+      'weight' => '2',
+      'label' => 'hidden',
+      'format' => 'sld_single_image',
+    ),
+    'service_links_displays_facebook' => array(
+      'weight' => '4',
+      'label' => 'hidden',
+      'format' => 'sld_single_image',
+    ),
+    'service_links_displays_google_plus' => array(
+      'weight' => '5',
+      'label' => 'hidden',
+      'format' => 'sld_single_image',
+    ),
+    'service_links_displays_linkedin' => array(
+      'weight' => '6',
+      'label' => 'hidden',
+      'format' => 'sld_single_image',
+    ),
+  );
+  $export['node|artikel|default'] = $ds_fieldsetting;
+
+  $ds_fieldsetting = new stdClass();
+  $ds_fieldsetting->api_version = 1;
   $ds_fieldsetting->id = 'node|artikel|teaser';
   $ds_fieldsetting->entity_type = 'node';
   $ds_fieldsetting->bundle = 'artikel';
   $ds_fieldsetting->view_mode = 'teaser';
   $ds_fieldsetting->settings = array(
+    'links' => array(
+      'weight' => '3',
+      'label' => 'hidden',
+      'format' => 'default',
+    ),
     'node_link' => array(
       'weight' => '2',
       'label' => 'hidden',
@@ -100,11 +140,21 @@ function artikel_ds_layout_settings_info() {
       'ds_content' => array(
         0 => 'body',
         1 => 'field_bild',
+        2 => 'service_links_displays_reddit',
+        3 => 'service_links_displays_twitter',
+        4 => 'service_links_displays_facebook',
+        5 => 'service_links_displays_google_plus',
+        6 => 'service_links_displays_linkedin',
       ),
     ),
     'fields' => array(
       'body' => 'ds_content',
       'field_bild' => 'ds_content',
+      'service_links_displays_reddit' => 'ds_content',
+      'service_links_displays_twitter' => 'ds_content',
+      'service_links_displays_facebook' => 'ds_content',
+      'service_links_displays_google_plus' => 'ds_content',
+      'service_links_displays_linkedin' => 'ds_content',
     ),
     'classes' => array(),
     'wrappers' => array(
@@ -131,12 +181,14 @@ function artikel_ds_layout_settings_info() {
         0 => 'field_bild',
         1 => 'body',
         2 => 'node_link',
+        3 => 'links',
       ),
     ),
     'fields' => array(
       'field_bild' => 'ds_content',
       'body' => 'ds_content',
       'node_link' => 'ds_content',
+      'links' => 'ds_content',
     ),
     'classes' => array(),
     'wrappers' => array(

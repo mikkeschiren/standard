@@ -1,4 +1,7 @@
-.view-mode-full p, .view-mode-full img {
-  padding: 0 40px;
+ .panel-1col {
+margin: 0 40px;
 }
 
+ .panel-1col .field-name-body {
+margin-top: 1em;
+}

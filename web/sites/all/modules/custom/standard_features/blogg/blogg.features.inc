@@ -1,13 +1,13 @@
 <?php
 /**
  * @file
- * artikel.features.inc
+ * blogg.features.inc
  */
 
 /**
  * Implements hook_ctools_plugin_api().
  */
-function artikel_ctools_plugin_api($module = NULL, $api = NULL) {
+function blogg_ctools_plugin_api($module = NULL, $api = NULL) {
   if ($module == "ds" && $api == "ds") {
     return array("version" => "1");
   }
@@ -20,14 +20,21 @@ function artikel_ctools_plugin_api($module = NULL, $api = NULL) {
 }
 
 /**
+ * Implements hook_views_api().
+ */
+function blogg_views_api($module = NULL, $api = NULL) {
+  return array("api" => "3.0");
+}
+
+/**
  * Implements hook_node_info().
  */
-function artikel_node_info() {
+function blogg_node_info() {
   $items = array(
-    'artikel' => array(
-      'name' => t('Artikel'),
+    'blog' => array(
+      'name' => t('Blog'),
       'base' => 'node_content',
-      'description' => t('Artikel'),
+      'description' => '',
       'has_title' => '1',
       'title_label' => t('Title'),
       'help' => '',
