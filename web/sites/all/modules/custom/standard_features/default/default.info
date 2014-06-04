@@ -1,0 +1,15 @@
+name = Default
+description = Base feature
+core = 7.x
+package = Features
+dependencies[] = ctools
+dependencies[] = strongarm
+features[ctools][] = strongarm:strongarm:1
+features[features_api][] = api:2
+features[variable][] = admin_theme
+features[variable][] = clean_url
+features[variable][] = site_frontpage
+features[variable][] = theme_bootstrap_business_settings
+features[variable][] = theme_default
+features[variable][] = theme_standard_settings
+project path = sites/all/modules/custom/standard_features

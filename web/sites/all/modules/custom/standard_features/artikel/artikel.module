@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Artikel feature.
+ */
+
+include_once 'artikel.features.inc';
