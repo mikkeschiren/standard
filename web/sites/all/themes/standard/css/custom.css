@@ -30,6 +30,6 @@ body #main-content {
 body #main-navigation ul.menu {
   text-align: center;
 }
-body .panel-1col {
+body.page-blogg .panel-1col {
     margin: 0;
 }
