@@ -33,3 +33,6 @@ body #main-navigation ul.menu {
 body.page-blogg .panel-1col {
     margin: 0;
 }
+body .page-node #content-wrapper h1.page-title {
+  margin: 20px 0 10px 0;
+}
