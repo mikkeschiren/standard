@@ -5,10 +5,3 @@ package = Testing
 hidden = TRUE
 dependencies[] = wysiwyg
 files[] = wysiwyg_test.module
-
-
-; Information added by drush on 2014-03-20
-version = "31840cbfd1386f4ce138d74f4d6878a1cfe31d2c"
-project = "wysiwyg"
-datestamp = "1395324494"
-
