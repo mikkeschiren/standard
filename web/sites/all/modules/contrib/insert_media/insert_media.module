@@ -135,7 +135,6 @@ function insert_media_render_insert_widget() {
       $element['preview']['#suffix'] = $prefix . $markup . '</div>';
     }
   }
-
   print drupal_render($element);
 }
 
@@ -168,10 +167,9 @@ function insert_media_element_info_alter(&$elements) {
  * Implements hook_theme_registry_alter().
  */
 function insert_media_theme_registry_alter(&$theme_registry) {
-  $path = drupal_get_path('module', 'insert_media');
   if ($theme_registry['media_thumbnail']) {
-    $theme_registry['media_thumbnail']['file'] = "{$path}/insert_media.module";
-    $theme_registry['media_thumbnail']['theme path'] = $path;
+    $theme_registry['media_thumbnail']['file'] = drupal_get_path('module', 'insert_media') . '/cheppers.module';
+    $theme_registry['media_thumbnail']['theme path'] = drupal_get_path('module', 'insert_media');
     $theme_registry['media_thumbnail']['function'] = 'insert_media_media_thumbnail';
   }
 }
@@ -185,31 +183,29 @@ function insert_media_theme_registry_alter(&$theme_registry) {
 function insert_media_media_thumbnail($variables) {
   $label = '';
   $element = $variables['element'];
-  $destination = drupal_get_destination();
 
   // Wrappers to go around the thumbnail.
-  $prefix = '<div class="media-item"><div class="media-thumbnail">';
+  $attributes = array(
+    'title' => $element['#name'],
+    'class' => 'media-item',
+    'data-fid' => $element['#file']->fid,
+  );
+  $prefix = '<div ' . drupal_attributes($attributes) . '><div class="media-thumbnail">';
   $suffix = '</div></div>';
 
   // Arguments for the thumbnail link.
   $thumb = $element['#children'];
-  $target = 'media/' . $element['#file']->fid . '/edit';
+  $target = 'file/' . $element['#file']->fid . '/edit';
   $options = array(
-    'query' => $destination,
+    'query' => drupal_get_destination(),
     'html' => TRUE,
-    'attributes' => array(
-      'title' => t('Click to edit details'),
-    ),
+    'attributes' => array('title' => t('Click to edit details')),
   );
 
-  // Element should be a field renderable array.
-  // This is a little wonky - admitted.
+  // Element should be a field renderable array. This should be improved.
   if (!empty($element['#show_names']) && $element['#name']) {
-    // Add ref attribute to hold the value of the image file id.
     $label = '<div class="label-wrapper"><label class="media-filename" ref="' . $element['#file']->fid . '">' . $element['#name'] . '</label></div>';
   }
-
-  drupal_add_css(drupal_get_path('module', 'media') . '/css/media.css');
 
   $output = $prefix;
   if (!empty($element['#add_link'])) {
@@ -309,4 +305,3 @@ function insert_media_insert_element_process($element) {
 
   return $element;
 }
-

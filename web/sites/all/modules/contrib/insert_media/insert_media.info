@@ -3,5 +3,5 @@ description = This module provides the integration between Media and Insert modu
 core = 7.x
 package = Media
 
-dependencies[] = media
+dependencies[] = media (7.x-2.x)
 dependencies[] = insert
