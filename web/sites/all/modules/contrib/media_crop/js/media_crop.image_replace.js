@@ -1,7 +1,7 @@
 (function ($) {
   Drupal.media_crop = Drupal.media_crop || {};
 
-  Drupal.media_crop.replaceImage = function (replaceData) {
+  Drupal.media_crop.replaceImage = function (replaceData) {    
     var id = replaceData.id;
     var options = replaceData.options;
     var token = replaceData.token;
@@ -12,7 +12,7 @@
       success: function (data) {
         var mciid = '%7BMCIID%7D';
         var img = $('#' + id);
-        if (img.length == 0) {
+        if (img.length === 0) {
           $('iframe').each(function () {
             var iimg = $(this).contents().find('#' + id);
             if (iimg.length > 0) {
@@ -26,6 +26,7 @@
         img.attr('src', src.replace(mciid, data));
         img.attr('data-cke-saved-src', dataCkeSavedSrc.replace(mciid, data));
         img.attr('class', cls.replace(mciid, data));
+        img.addClass('mciid-' + data);
       },
       error: function (jqXHR, textStatus, errorThrown) {
         if (parent.console && parent.console.log) {
@@ -39,7 +40,7 @@
            token,
       data: {
         media_crop: {
-          angle: options.media_crop_rotate,
+          angle: 0, //options.media_crop_rotate,
           w: options.media_crop_w,
           h: options.media_crop_h,
           x: options.media_crop_x,

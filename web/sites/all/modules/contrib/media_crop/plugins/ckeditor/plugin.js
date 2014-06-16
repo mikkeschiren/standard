@@ -1,7 +1,7 @@
 (function ($) {
   CKEDITOR.plugins.add('media_crop_ckeditor', {
     init: function (editor, pluginPath) {
-
+    
       editor.addCommand('mediaCropEditInstance',{
         exec: function (editor){
           var sel = editor.getSelection();
@@ -43,6 +43,22 @@
         });
       }
 
+      // Remove elements by clicking on them.
+      editor.on( 'elementsPathUpdate', function( ev ) {
+        $('.cke_path_item').bind("contextmenu", function(e){
+          var matches = /,(\d+)/.exec(v);
+          if (matches.length > 1) {
+            // Get a hold of the element.
+            var element_index = matches[1];
+            var $element = $(editor._.elementsPath.list[element_index].$);
+            // Remove selected element.
+            $element.contents().unwrap();
+            // Trigegr a change so we update the elements path.
+            $(editor).trigger( 'selectionChange', ev );
+          }
+        });
+      });
+
       // Add behaviour if context menu opens up.
       if (editor.contextMenu) {
         //function to be run when context menu is displayed
@@ -58,8 +74,9 @@
 
   var mediaBrowserOnLoad = Drupal.media.popups.mediaStyleSelector.mediaBrowserOnLoad;
   Drupal.media.popups.mediaStyleSelector.mediaBrowserOnLoad = function (e) {
-    if (document.getElementById('mediaStyleSelector').contentWindow.Drupal.media_crop.actions.init && e.data.crop) {
-      document.getElementById('mediaStyleSelector').contentWindow.Drupal.media_crop.actions.init(e.data);
-    }
+      console.log('hej');
+//    if (document.getElementById('mediaStyleSelector').contentWindow.Drupal.media_crop.actions.init && e.data.crop) {
+//      document.getElementById('mediaStyleSelector').contentWindow.Drupal.media_crop.actions.init(e.data);
+//    }
   };
 })(jQuery);

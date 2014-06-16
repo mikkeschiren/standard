@@ -62,6 +62,14 @@ function media_crop_menu() {
     'type' => MENU_CALLBACK,
   );
 
+  $items['system/files/media_crop/%media_crop_instance'] = array(
+    'title' => 'Generate media crop private',
+    'page callback' => 'media_crop_get_image',
+    'page arguments' => array(3),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
   return $items;
 }
 
@@ -103,15 +111,98 @@ function media_crop_media_format_form_prepare_alter(&$form, $form_state, $file) 
   }
 
   // Alter only if file is not remote and is of type image.
-  $scheme = file_uri_scheme($file->uri);
-  $is_not_remote = module_exists('remote_stream_wrapper') ? !file_is_scheme_remote($scheme) : TRUE;
+  if (!_media_crop_is_file_remote($file) && $file->type === 'image') {
+    
+    // Get the default format option.
+    $default_option = variable_get('media_crop_default_style', -1);
+    if (isset($form['options'], $form['options']['format'])) {
+      $default_option = $form['options']['format']['#default_value'];
+    }
+    
+    // Defaults.
+    $settings = array(
+      'image_style_name' => $default_option,
+      'angle' => 0,
+      'crop_x' => 0,
+      'crop_y' => 0,
+      'crop_w' => 0,
+      'crop_h' => 0,
+      'crop_scale_w' => isset($file->image_dimensions) ? $file->image_dimensions['width'] : 0,
+      'crop_scale_h' => isset($file->image_dimensions) ? $file->image_dimensions['height'] : 0,
+    );
+    
+    // Load image style.
+    $defaults = array();
+    $image_styles = image_styles();
+    foreach($image_styles as $name => $image_style) {
+      foreach($image_style['effects'] as $effect) {
+        switch ($effect['name']) {
+          case 'image_scale':
+            $defaults[$name]['crop_scale_w'] = (int)$effect['data']['width'];
+            if ($defaults[$name]['crop_scale_w'] == 0) {
+              $scale = $defaults[$name]['crop_scale_h'] / $file->image_dimensions['height'];
+              $defaults[$name]['crop_scale_w'] = (int)round($scale * $file->image_dimensions['width']);
+            }
+            $defaults[$name]['crop_scale_h'] = (int)$effect['data']['height'];
+            if ($defaults[$name]['crop_scale_h'] == 0) {
+              $scale = $defaults[$name]['crop_scale_w'] / $file->image_dimensions['width'];
+              $defaults[$name]['crop_scale_h'] = (int)round($scale * $file->image_dimensions['height']);
+            }
+            break;
+          case 'image_scale_and_crop':
+            if ($file->image_dimensions['width'] < $file->image_dimensions['height']) {
+              // Scale width relativt to the height.
+              $scale = $effect['data']['width'] / $file->image_dimensions['width'];
 
-  if ($is_not_remote && $file->type === 'image') {
+              $defaults[$name]['crop_scale_w'] = (int)$effect['data']['width'];
+              $defaults[$name]['crop_scale_h'] = (int)round($scale * $file->image_dimensions['height']);
+              $defaults[$name]['crop_w'] = (int)$effect['data']['width'];
+              $defaults[$name]['crop_h'] = (int)$effect['data']['height'];
+            }
+            else {
+              // Scale height relativt to the width.
+              $scale = $effect['data']['height'] / $file->image_dimensions['height'];
+
+              $defaults[$name]['crop_scale_w'] = (int)round($scale * $file->image_dimensions['width']);
+              $defaults[$name]['crop_scale_h'] = (int)$effect['data']['height'];
+              $defaults[$name]['crop_w'] = (int)$effect['data']['width'];
+              $defaults[$name]['crop_h'] = (int)$effect['data']['height'];
+            }
+            break;
+        }
+      }
+    }
+
+    // Override settings with defaults for the current format.
+    $settings = array_merge($settings, $defaults[$default_option]);
+
+    // Load the settings for this instance.
+    if (isset($_GET['attributes'])) {
+      $attr = $_GET['attributes'];
+      if (isset($attr, $attr['class'])) {
+        // Get a hold of the mciid.
+        $mciid = preg_replace('/(.*?mciid-)([\d]+)(.*)/', '$2', $attr['class']);
+        $media_crop_instance = media_crop_instance_load($mciid);
+        // Override defaults with custom settings for this instance if any.
+        $settings =  array_merge($settings, (array)$media_crop_instance);
+      }
+    }
+
+    // If no cropping is set, set the cropping to follow the style format.
+    if ($settings['crop_w'] == 0) {
+      $settings['crop_w'] = $settings['crop_scale_w'];
+    }
+    if ($settings['crop_h'] == 0) {
+      $settings['crop_h'] = $settings['crop_scale_h'];
+    }
+
+    // Add the media token.
     $form['token'] = array(
       '#type' => 'hidden',
       '#value' => drupal_get_token(MEDIA_CROP_TOKEN_VALUE),
     );
 
+    // Add a template example.
     $form['template'] = array(
       '#type' => 'hidden',
       '#value' => theme('image', array(
@@ -122,53 +213,166 @@ function media_crop_media_format_form_prepare_alter(&$form, $form_state, $file) 
       )),
     );
 
-    $top_container_key = 'format_and_crop_top';
-    $bottom_container_key = 'format_and_crop_bottom';
+    // Remove the preview created by the media module.
+    unset($form['preview']);
 
-    $image = image_load($file->uri);
-
-    // Remove original format select, we bypass this with a media crop specific
-    // fake view mode.
+    // Remove the format select created by the media module.
     unset($form['options']['format']);
     $form['format_and_crop']['format'] = array(
       '#type' => 'hidden',
       '#value' => 'media_crop',
     );
 
-    $form['image_edit_elements'] = array(
-      '#type' => 'container',
-      '#weight' => 0,
-      '#attributes' => array(
-        'class' => array('image-edit-elements-container'),
-      ),
-    );
-
-    unset($form['preview']);
-
-    // Form elements after this appear above the image area.
-    $form['image_edit_elements'][$top_container_key] = array(
-      '#type' => 'container',
-      '#weight' => 0,
-      '#attributes' => array(
-        'class' => array('format-and-crop-container-top clearfix'),
-      ),
-    );
-
-    $image_style_options = image_style_options(FALSE);
-    $form['image_edit_elements'][$top_container_key]['image_style'] = array(
+    // Create the new selector for the format.
+    $image_style_options = image_style_options();
+    $form['image_edit_options']['image_style'] = array(
       '#type' => 'select',
       '#title' => t('Current format is:', array(), array(
         'context' => 'Media crop')),
       '#weight' => -2,
-      '#options' => $image_style_options + array(
-        '-1' => t('None'),
-      ),
-      '#default_value' => variable_get('media_crop_default_style', -1),
-      '#attributes' => array(
-        'class' => array('media-crop-special-select'),
-      ),
+      '#options' => $image_style_options,
+      '#default_value' => $settings['image_style_name'],
     );
 
+
+    /* SCALING. ------------------------------------------------------------- */
+
+    $form['image_edit_options']['scale'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Scale size',
+    );
+    
+    // Add a checkbox for maintaining scale apect ratio.
+    $form['image_edit_options']['scale']['maintain_scale_aspect_ratio'] = array(
+      '#type' => 'checkbox',
+      '#title' => 'Maintain scale aspect ratio',
+      '#default_value' => TRUE,
+    );
+
+    // Add scaling width textfield.
+    $form['image_edit_options']['scale']['crop_scale_w'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Width',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_scale_w'],
+    );
+
+    // Add scaling height textfield.
+    $form['image_edit_options']['scale']['crop_scale_h'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Height',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_scale_h'],
+    );
+
+
+    /* CLIPPING. ------------------------------------------------------------ */
+
+    $form['image_edit_options']['clip'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Clipping',
+    );
+
+    // Add cropping x textfield.
+    $form['image_edit_options']['clip']['crop_x'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Left',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_x'],
+    );
+
+    // Add cropping width textfield.
+    $form['image_edit_options']['clip']['clip_right'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Right',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_scale_w'] - $settings['crop_w'],
+    );
+
+    // Add cropping y textfield.
+    $form['image_edit_options']['clip']['crop_y'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Top',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_y'],
+    );
+
+    // Add clipping bottom textfield.
+    $form['image_edit_options']['clip']['clip_bottom'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Bottom',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_scale_h'] - $settings['crop_h'],
+    );
+
+
+    /* CROPPING. ------------------------------------------------------------ */
+    
+    $form['image_edit_options']['crop'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Crop size',
+    );
+
+    // Add a checkbox for maintaining scale apect ratio.
+    $form['image_edit_options']['crop']['maintain_crop_aspect_ratio'] = array(
+      '#type' => 'checkbox',
+      '#title' => 'Maintain crop aspect ratio',
+      '#default_value' => TRUE,
+    );
+    
+    // Add cropping width textfield.
+    $form['image_edit_options']['crop']['crop_w'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Width',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_w'],
+    );
+    
+    // Add cropping height textfield.
+    $form['image_edit_options']['crop']['crop_h'] = array(
+      '#type' => 'textfield',
+      '#title' => 'Height',
+      '#size' => 4,
+      '#maxlength' => 4,
+      '#default_value' => $settings['crop_h'],
+    );
+    
+    // Load the original image.
+    $preview = file_view_file($file, array('file_image' => array(
+      'weight' => 0,
+      'status' => TRUE,
+      'settings' => array(
+        'image_style' => '',
+      ),
+    )));
+    
+    $preview['#theme_wrappers'][] = 'media_thumbnail';
+    $form['original_image']['preview']['#markup'] = drupal_render($preview);
+
+    // Add settings for the existing formats.
+    $form['#attached']['js'][] = array(
+      'type' => 'setting',
+      'data' => array('media_crop_defaults' => $defaults),
+    );
+
+    // Attach styling and javascript functionality.
+    $form['#attached']['css'][] = drupal_get_path('module', 'media_crop') . "/css/media_crop.css";
+    $form['#attached']['js'][] = drupal_get_path('module', 'media_crop') . "/js/media_crop.js";
+
+    // Add the file id.
+    $form['fid'] = array(
+      '#type' => 'hidden',
+      '#value' => $file->fid,
+    );
+
+    // Go through all style options.
     $image_style_keys = array_keys($image_style_options);
     foreach ($image_style_keys as $style_key) {
       $image_styles = image_styles();
@@ -182,7 +386,7 @@ function media_crop_media_format_form_prepare_alter(&$form, $form_state, $file) 
         'path' => "media_crop/{$style_key}/{$file->fid}/0/0/0/0/0",
       ));
 
-      $form['image_edit_elements'][$top_container_key]['image_style']['#attached']['js'][] = array(
+      $form['image_edit_options']['image_style']['#attached']['js'][] = array(
         'data' => array(
           'media_crop' => array(
             'imageStyleHtml' => array(
@@ -203,12 +407,13 @@ function media_crop_media_format_form_prepare_alter(&$form, $form_state, $file) 
         $safe_style_rotation_crop_info = _media_crop_extract_rotation_and_crop($style_def['effects'], $image->info['width'], $image->info['height']);
       }
 
-      $form['image_edit_elements'][$top_container_key]['image_style']['#attached']['js'][] = array(
+      $form['image_edit_options']['image_style']['#attached']['js'][] = array(
         'data' => array(
           'media_crop' => array(
             'styles' => array(
               $style_key => array(
                 'safe' => $is_safe,
+                'effects' => $style_def['effects'],
               ) + $safe_style_rotation_crop_info,
             ),
           ),
@@ -216,227 +421,6 @@ function media_crop_media_format_form_prepare_alter(&$form, $form_state, $file) 
         'type' => 'setting',
       );
     }
-
-    $form['image_edit_elements'][$top_container_key]['image_style_description'] = array(
-      '#markup' => t('Includes effects that may produce <a href="@url" target="_blank">unexpected results</a>.', array('@url' => url('admin/help/media_crop')), array('context' => 'Media crop')),
-      '#prefix' => '<div class="image-style-description">',
-      '#suffix' => '</div>',
-      '#weight' => -1,
-    );
-
-    // Form elements after this appear under the image area.
-    $form['image_edit_elements']['enable_interface'] = array(
-      '#markup' => theme('image', array(
-        'path' => drupal_get_path('module', 'media_crop') . '/images/crop-rotate-scale.png',
-        'attributes' => array(
-          'class' => 'enable-interface',
-          'title' => t('Enable Image Editor UI', array(), array('context' => 'Media crop')),
-        ),
-      )),
-      '#weight' => 2,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key] = array(
-      '#type' => 'container',
-      '#weight' => 3,
-      '#attributes' => array(
-        'class' => array('format-and-crop-container-bottom clearfix'),
-      ),
-    );
-
-    $crop_warning = theme('image', array(
-      'path' => drupal_get_path('module', 'media_crop') . '/images/warning.png',
-      'attributes' => array(
-        'class' => 'crop-warning',
-        'title' => t('Overrides the Image style’s cropping.', array(), array('context' => 'Media crop')),
-      ),
-    ));
-    list($crop_title, $crop_desc) = explode('@sep', t('Crop @sep (click / drag)', array(), array('context' => 'Media crop')));
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container'] = array(
-      '#type' => 'fieldset',
-      '#title' => $crop_warning . $crop_title . '<span class="crop-title-description">' . $crop_desc . '</span>',
-      '#weight' => -3,
-      '#attributes' => array(
-        'class' => array('crop-dimensions-container'),
-      ),
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container']['crop_aspect_ratio_lock'] = array(
-      '#markup' => theme('image', array(
-        'path' => drupal_get_path('module', 'media_crop') . '/images/lock.png',
-        'attributes' => array(
-          'class' => 'crop-aspect-ratio-lock',
-          'title' => t('Lock aspect ratio', array(), array('context' => 'Media crop')),
-        ),
-      )),
-      '#weight' => -3,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container']['crop_aspect_ratio_unlock'] = array(
-      '#markup' => theme('image', array(
-        'path' => drupal_get_path('module', 'media_crop') . '/images/unlock.png',
-        'attributes' => array(
-          'class' => 'crop-aspect-ratio-unlock',
-          'title' => t('Unlock aspect ratio', array(), array('context' => 'Media crop')),
-        ),
-      )),
-      '#weight' => -3.1,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container']['crop_dimensions'] = array(
-      '#type' => 'container',
-      '#attributes' => array(
-        'class' => array('crop-dimensions'),
-      ),
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container']['crop_dimensions']['crop_width'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Width:', array(), array('context' => 'Media crop')),
-      '#field_suffix' => 'px',
-      '#element_validata' => 'element_validate_integer_positive',
-      '#size' => 4,
-      '#maxlength' => 4,
-      '#weight' => -2,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['crop_dimensions_container']['crop_dimensions']['crop_height'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Height:', array(), array('context' => 'Media crop')),
-      '#field_suffix' => 'px',
-      '#element_validata' => 'element_validate_integer_positive',
-      '#size' => 4,
-      '#maxlength' => 4,
-      '#weight' => -1,
-    );
-
-    $scale_warning = theme('image', array(
-      'path' => drupal_get_path('module', 'media_crop') . '/images/warning.png',
-      'attributes' => array(
-        'class' => 'scale-warning',
-        'title' => t('Upscaling may produce poor image quality.', array(), array('context' => 'Media crop')),
-      ),
-    ));
-    $form['image_edit_elements'][$bottom_container_key]['scale_image_container'] = array(
-      '#type' => 'fieldset',
-      '#title' => $scale_warning . t('Scale', array(), array('context' => 'Media crop')),
-      '#weight' => -2,
-      '#attributes' => array(
-        'class' => array('scale-image-container'),
-      ),
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['scale_image_container']['scale_width'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Width:', array(), array('context' => 'Media crop')),
-      '#field_suffix' => 'px',
-      '#element_validata' => 'element_validate_integer_positive',
-      '#size' => 4,
-      '#maxlength' => 4,
-      '#weight' => -2,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['scale_image_container']['scale_height'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Height:', array(), array('context' => 'Media crop')),
-      '#field_suffix' => 'px',
-      '#element_validata' => 'element_validate_integer_positive',
-      '#size' => 4,
-      '#maxlength' => 4,
-      '#weight' => -1,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['rotate_image_container'] = array(
-      '#type' => 'fieldset',
-      '#title' => t('Rotate', array(), array('context' => 'Media crop')),
-      '#weight' => -1,
-      '#attributes' => array(
-        'class' => array('rotate-image-container'),
-      ),
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['rotate_image_container']['rotate_right'] = array(
-      '#markup' => '<a href="#" class="rotate-right-button"><span>' . t('Right', array(), array('context' => 'Media crop')) . '</span></a>',
-      '#weight' => -2,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['rotate_image_container']['rotate_left'] = array(
-      '#markup' => '<a href="#" class="rotate-left-button"><span>' . t('Left', array(), array('context' => 'Media crop')) . '</span></a>',
-      '#weight' => -1,
-    );
-
-    $form['image_edit_elements'][$bottom_container_key]['disable_interface'] = array(
-      '#markup' => theme('image', array(
-        'path' => drupal_get_path('module', 'media_crop') . '/images/close-crop.png',
-        'attributes' => array(
-          'class' => 'disable-interface',
-          'title' => t('Disable Image Editor UI', array(), array('context' => 'Media crop')),
-        ),
-      )),
-      '#weight' => 0,
-    );
-
-    $form['options']['#title'] = '';
-    $form['options']['#weight'] = 5;
-
-    $form['heading']['#weight'] = -5;
-
-    // Create width, height, x, y fields.
-    foreach (array('width', 'height', 'x', 'y', 'rotate') as $name) {
-      $form[$name] = array(
-        '#title' => t(ucfirst($name), array(), array('context' => 'Media crop')),
-        '#title_display' => 'invisible',
-        '#type' => 'textfield',
-        '#attributes' => array(
-          'class' => array(
-            'media-crop-invisible',
-          ),
-        ),
-        '#theme_wrappers' => array(),
-      );
-    }
-
-    $form['#attached']['css'][] = drupal_get_path('module', 'media_crop') . "/css/media_crop.base.css";
-    $form['#attached']['css'][] = drupal_get_path('module', 'media_crop') . "/css/media_crop.theme.css";
-    $form['#attached']['js'][] = drupal_get_path('module', 'media_crop') . "/js/media_crop.js";
-
-    $preview = file_view_file($file, 'media_original');
-    $preview['#theme_wrappers'][] = 'media_thumbnail';
-    $form['image_edit_elements']['preview']['#markup'] = drupal_render($preview);
-    $form['image_edit_elements']['preview']['#weight'] = 1;
-
-    $form['image_edit_elements']['rotated-images'] = array(
-      '#type' => 'container',
-      '#attributes' => array(
-        'class' => array(
-          'rotated-images',
-        ),
-      ),
-    );
-
-    for ($deg = 90; $deg < 360; $deg += 90) {
-      $form['image_edit_elements']['rotated-images']["preview_{$deg}"] = array(
-        '#markup' => theme('image_style', array(
-          'style_name' => "media_crop_rotate_{$deg}",
-          'path' => $file->uri,
-          'attributes' => array(
-            'class' => "rotated rotated-{$deg}",
-          ),
-        )),
-      );
-    }
-
-    $form['#attached']['js'][] = array(
-      'type' => 'setting',
-      'data' => array('media_format_form' => array()),
-    );
-
-    $form['fid'] = array(
-      '#type' => 'hidden',
-      '#value' => $file->fid,
-    );
-
-    $form['#attached']['library'][] = array('media_crop', 'imgareaselect');
   }
 }
 
@@ -582,8 +566,20 @@ function media_crop_create_instance($style_name, $file, $token) {
   return NULL;
 }
 
+
 /**
  * Page callback for image generation.
+ * @param  media_crop_instance == object
+ *         $o->mciid
+ *         $o->fid
+ *         $o->image_style_name
+ *         $o->angle
+ *         $o->crop_x
+ *         $o->crop_y
+ *         $o->crop_w
+ *         $o->crop_h
+ *         $o->crop_scale_w
+ *         $o->crop_scale_h
  */
 function media_crop_get_image($media_crop_instance) {
   if (!$media_crop_instance) {
@@ -727,10 +723,10 @@ function media_crop_create_derivative($crop_object) {
     return FALSE;
   }
 
-  _media_crop_apply_rotation($angle, $image);
-  _media_crop_apply_crop($crop_width, $crop_height, $crop_x_coordinate, $crop_y_coordinate, $image);
   _media_crop_apply_image_style($style, $image);
   _media_crop_apply_scale($scale_width, $scale_height, $image);
+  _media_crop_apply_rotation($angle, $image);
+  _media_crop_apply_crop($crop_width, $crop_height, $crop_x_coordinate, $crop_y_coordinate, $image);
 
   if (!image_save($image, $destination)) {
     if (file_exists($destination)) {
@@ -780,14 +776,16 @@ function _media_crop_apply_crop($crop_width, $crop_height, $crop_x_coordinate, $
   if ($crop_width && $crop_height) {
     $image_width = $image->info['width'];
     $image_height = $image->info['height'];
-    image_effect_apply($image, array(
+    $data = array(
       'name' => 'image_crop',
       'data' => array(
-        'width' => (int) _media_crop_scale($image_width, $image_height, $crop_width),
-        'height' => (int) _media_crop_scale($image_width, $image_height, $crop_height),
-        'anchor' => ((int) _media_crop_scale($image_width, $image_height, $crop_x_coordinate)) . '-' . ((int) _media_crop_scale($image_width, $image_height, $crop_y_coordinate)),
+        'x' => (int) $crop_x_coordinate,
+        'y' => (int) $crop_y_coordinate,
+        'width' => (int) $crop_width,
+        'height' => (int) $crop_height,
       ),
-    ) + image_effect_definition_load('image_crop'));
+    ) + image_effect_definition_load('image_crop');
+    image_effect_apply($image, $data);
   }
 }
 
@@ -1012,14 +1010,35 @@ function _media_crop_extract_rotation_and_crop(array $effects, $image_width, $im
  */
 function media_crop_media_token_to_markup_alter(&$element, $tag_info, $settings) {
   if ($tag_info['view_mode'] === 'media_crop' && $tag_info['file']->type === 'image') {
-    $element['#attributes']['class'] = array('media-image');
-    $media_crop_settings = $tag_info['attributes'];
-    foreach ($media_crop_settings as $name => $value) {
-      if (_startsWith($name, 'media_crop_')) {
-        $element['#attributes']['class'][] = 'attr__' . $name . '__' . $value;
-        $element['#media_crop'][$name] = $value;
+
+    $mciid = NULL;
+    foreach ($tag_info['attributes']['class'] as $k => $class_name) {
+      if (substr($class_name, 0, 6) == "mciid-") {
+        $mciid = str_replace("mciid-", "", $class_name);
       }
     }
+
+    if (is_null($mciid)) {
+      return $element;
+    }
+
+    // Something changes here.
+    // @todo find out why.
+    if (!isset($element['#file']) && isset($element['content']['file']['#file'])) {
+      $element['#file'] = $element['content']['file']['#file'];
+    }
+
+    if (!isset($element['#attributes']) && is_array($tag_info['attributes'])) {
+      $element['#attributes'] = $tag_info['attributes'];
+      foreach($tag_info as $key => $value) {
+        if (in_array($key, array('height, width', 'alt', 'title', 'style'))) {
+          $element["#{$key}"] = $value;
+        }
+      }
+    }
+
+    $element['#media_crop'] = array();
+    $element['#media_crop']['media_crop_instance'] = $mciid;
     $element['#theme'] = 'media_crop_image';
   }
 }
@@ -1027,7 +1046,12 @@ function media_crop_media_token_to_markup_alter(&$element, $tag_info, $settings)
 /**
  * Wildcald loader, for loading a media crop instance object.
  */
-function media_crop_instance_load($mciid) {
+function media_crop_instance_load($mciid, $fid = NULL) {
+  if (is_numeric($fid)) {
+    return db_query('SELECT * FROM {media_crop_instance} WHERE fid = :fid', array(
+      ':fid' => (int) $fid,
+    ))->fetch();
+  }
   return is_numeric($mciid) ?
     db_query('SELECT * FROM {media_crop_instance} WHERE mciid = :mciid', array(
       ':mciid' => (int) $mciid,
@@ -1043,8 +1067,18 @@ function theme_media_crop_image($variables) {
 
   $image_variables = array(
     'path' => _media_crop_get_path($mciid, $file->uri),
-    'attributes' => $variables['attributes'],
+    'attributes' => array(
+      'class' => implode(" ", $variables['attributes']['class']),
+      'id' => $variables['attributes']['id'],
+    ),
   );
+  
+  // Add all attributes.
+  foreach($variables['attributes'] as $key => $value) {
+    if (!in_array($key, array('class', 'id'))) {
+      $image_variables['attributes'][$key] = $value;
+    }
+  }
 
   return theme('image', $image_variables);
 }
@@ -1054,6 +1088,15 @@ function theme_media_crop_image($variables) {
  */
 function media_crop_element_info_alter(&$types) {
   $types['text_format']['#pre_render'][] = 'media_crop_pre_render_text_format';
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * Add media_crop view modes to the file entity type.
+ */
+function media_crop_entity_info_alter(&$entity_info) {
+  $entity_info['file']['view modes']['media_crop'] = array('label' => t('Media Crop'), 'custom settings' => FALSE);
 }
 
 /**
@@ -1130,4 +1173,21 @@ function _is_positive_integer($value) {
 function _startsWith($haystack, $needle) {
   $length = strlen($needle);
   return (substr($haystack, 0, $length) === $needle);
+}
+
+/**
+ * Checks if file is remote.
+ *
+ * @param stdClass $file
+ *   File object.
+ *
+ * @return bool
+ *   TRUE if file is remote, FALSE otherwise.
+ */
+function _media_crop_is_file_remote($file) {
+  $scheme = file_uri_scheme($file->uri);
+  $is_remote_stream_wrapper = module_exists('remote_stream_wrapper') ? file_is_scheme_remote($scheme) : FALSE;
+  $is_oembed = ($scheme === 'oembed');
+
+  return $is_remote_stream_wrapper || $is_oembed;
 }
