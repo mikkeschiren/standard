@@ -1,0 +1,60 @@
+language: php
+
+php:
+  - 5.3
+  - 5.4
+  - 5.5
+
+matrix:
+  allow-failures:
+    - php: 5.5
+
+env:
+  global:
+    - ES_VER=1.1.1
+    - ES_MAPPER_ATTACHMENTS_VER=2.0.0.RC1
+    - ES_TRANSPORT_THRIFT_VER=2.0.0.RC1
+    - ES_GEOCLUSTER_FACET_VER=0.0.10
+    - ES_WAIT_ON_MAPPING_CHANGE=true
+    - DATABASE='drupal'
+    - DB_USERNAME='root'
+    - DB_ENCODE='utf8'
+    - MODULE_PATH='build/sites/all/modules/search_api_elasticsearch'
+    - ES_REQUIRE='no-dev'
+  matrix:
+    - DRUPAL_3RD_PARTY='composer_manager'
+    - DRUPAL_3RD_PARTY='libraries'
+
+mysql:
+  database: $DATABASE
+  username: $DB_USERNAME
+  encoding: $DB_ENCODE
+
+before_install:
+  - composer self-update
+  - pear channel-discover pear.drush.org
+
+install:
+  - pear install drush/drush
+  - phpenv rehash
+  - ./tests/bin/run_elasticsearch.sh
+
+before_script:
+  - echo 'sendmail_path = /bin/true' >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
+  - drush --yes make tests/includes/search_api_elasticsearch.make build
+  - mkdir -p $MODULE_PATH
+  - git archive $(git rev-parse --abbrev-ref HEAD) | tar -x -C $MODULE_PATH
+  - cd build
+  - drush --yes site-install minimal --db-url="mysql://$DB_USERNAME@127.0.0.1/$DATABASE"
+  - drush --yes dis search
+  - drush --yes en $DRUPAL_3RD_PARTY
+  - drush --yes en search_api_elasticsearch
+  - drush --yes en search_api_elasticsearch_elastica
+  - drush --yes en simpletest
+
+script:
+  - drush test-run --uri=http://localhost 'Search API Elasticsearch' --debug
+  - phpunit
+
+notifications:
+  irc: irc.freenode.org#vmdoh
